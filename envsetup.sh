@@ -131,13 +131,11 @@ _lvgl_apply_lunch_target() {
             local rk_cxx="${RK3568_CXX:-${prefix}g++}"
             export CC="${rk_cc}"
             export CXX="${rk_cxx}"
-            if [[ -n "${RK3568_SYSROOT:-}" ]]; then
-                export PKG_CONFIG_SYSROOT_DIR="${RK3568_SYSROOT}"
-                export PKG_CONFIG_LIBDIR="${RK3568_SYSROOT}/usr/lib/pkgconfig:${RK3568_SYSROOT}/usr/share/pkgconfig"
-            else
-                echo "Warning: RK3568_SYSROOT is not set; pkg-config may resolve host libraries." >&2
-                unset PKG_CONFIG_SYSROOT_DIR
-                unset PKG_CONFIG_LIBDIR
+            if [[ -z "${RK3568_CMAKE_TOOLCHAIN_FILE:-}" ]]; then
+                local default_toolchain="${LVGL_PORT_ROOT}/rk3568_toolchain.cmake"
+                if [[ -f "${default_toolchain}" ]]; then
+                    export RK3568_CMAKE_TOOLCHAIN_FILE="${default_toolchain}"
+                fi
             fi
             export LVGL_LUNCH_BACKENDS="drm"
             ;;
@@ -163,7 +161,11 @@ _lvgl_configure_cmake() {
 
     local -a cmake_args=(-S "${LVGL_PORT_ROOT}" -B "${build_dir}")
     if [[ "${target}" == "rk3568-drm" ]]; then
-        local toolchain_file="${RK3568_CMAKE_TOOLCHAIN_FILE:-${LVGL_PORT_ROOT}/user_cross_compile_setup.cmake}"
+        local default_toolchain="${LVGL_PORT_ROOT}/rk3568_toolchain.cmake"
+        if [[ ! -f "${default_toolchain}" ]]; then
+            default_toolchain="${LVGL_PORT_ROOT}/user_cross_compile_setup.cmake"
+        fi
+        local toolchain_file="${RK3568_CMAKE_TOOLCHAIN_FILE:-${default_toolchain}}"
         if [[ -f "${toolchain_file}" ]]; then
             cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="${toolchain_file}")
         else
