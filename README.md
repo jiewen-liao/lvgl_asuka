@@ -152,17 +152,22 @@ newgrp video
 An Android-style env helper is provided to streamline common commands.
 
 ```
-source ./envsetup.sh   # loads lunch/m/mclean helper functions
-lunch                  # pick a preset such as host-sdl or rk3568-drm
-m                      # run cmake --build <build-dir> --parallel <jobs>
-mclean                 # run cmake --build <build-dir> --target clean
-h                      # print the helper summary
+source ./envsetup.sh              # loads lunch/m/mclean helper functions
+lunch host-sdl demo_widgets       # or run plain 'lunch' to be prompted interactively
+m                                  # run cmake --build <build-dir> --parallel <jobs>
+mclean                             # run cmake --build <build-dir> --target clean
+h                                  # print the helper summary
 ```
 
-Each lunch preset regenerates `lv_conf.h` from the defaults stored under `configs/lunch/`
-and exports the appropriate toolchain variables so the stock `make` targets immediately
-build for the selected backend. Use `lunch -l` to list choices and `lunch -c` to clear
-the selection. After choosing a preset the helper also runs `cmake -B build/<preset> -S .`
-with the right toolchain so `m`/`mclean` become shortcuts for `cmake --build`. Use the
-`LVGL_EXTRA_CMAKE_ARGS` environment variable if you need to pass additional CMake options
-before sourcing `envsetup.sh`.
+`lunch` now splits the workflow into two stages: first pick a **platform preset**
+(host-sdl, host-wayland, rk3568-drm, …), then pick an **application preset**
+(demo_widgets, demo_benchmark, …). Each platform preset regenerates `lv_conf.h`
+from the corresponding defaults under `configs/lunch/` and exports the appropriate
+toolchain variables. Each app preset maps to a function implemented in
+`src/app/app_entry.c`, so this file is the single spot to plug in additional demos.
+
+Use `lunch -l` to list both platform and app choices, `lunch -c` to clear selections.
+After the choices are made the helper also runs `cmake -B build/<platform>-<app> -S .`
+with the correct toolchain, so `m`/`mclean` become shortcuts for `cmake --build`.
+Use the `LVGL_EXTRA_CMAKE_ARGS` environment variable if you need to pass additional
+CMake options before sourcing `envsetup.sh`.

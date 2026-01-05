@@ -21,6 +21,14 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic")
 set(LV_BUILD_SET_CONFIG_OPTS ON CACHE BOOL
     "create CMAKE variables from lv_conf_internal.h" FORCE)
 
+set(LVGL_APP_TARGET "${LVGL_APP_TARGET}" CACHE STRING "Application entry to run (demo_widgets, demo_benchmark, ...)")
+if(NOT LVGL_APP_TARGET)
+    set(LVGL_APP_TARGET "demo_widgets" CACHE STRING "Application entry to run" FORCE)
+endif()
+string(REGEX REPLACE "[^A-Za-z0-9_]" "_" LVGL_APP_TARGET_SANITIZED "${LVGL_APP_TARGET}")
+string(TOUPPER "${LVGL_APP_TARGET_SANITIZED}" LVGL_APP_TARGET_DEFINE)
+message(STATUS "Selected app target: ${LVGL_APP_TARGET}")
+
 add_subdirectory(lvgl)
 
 if (CONFIG_LV_USE_EVDEV)
@@ -273,6 +281,7 @@ endif()
 
 
 file(GLOB LV_LINUX_SRC src/lib/*.c)
+file(GLOB LV_APP_SRC src/app/*.c)
 set(LV_LINUX_INC src/lib)
 
 target_include_directories(lvgl PUBLIC ${PKG_CONFIG_INC})
@@ -290,8 +299,9 @@ target_include_directories(lvgl_linux PUBLIC
 # Link LVGL with external dependencies - Modern CMake/CMP0079 allows this
 target_link_libraries(lvgl PUBLIC ${PKG_CONFIG_LIB} m pthread)
 
-add_executable(lvglsim src/main.c ${LV_LINUX_SRC} ${LV_LINUX_BACKEND_SRC})
+add_executable(lvglsim src/main.c ${LV_LINUX_SRC} ${LV_LINUX_BACKEND_SRC} ${LV_APP_SRC})
 target_link_libraries(lvglsim lvgl_linux lvgl)
+target_compile_definitions(lvglsim PRIVATE LVGL_APP_TARGET_${LVGL_APP_TARGET_DEFINE})
 
 
 

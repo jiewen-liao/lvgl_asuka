@@ -24,8 +24,8 @@
 #include <string.h>
 
 #include "lvgl/lvgl.h"
-#include "lvgl/demos/lv_demos.h"
 
+#include "src/app/app_entry.h"
 #include "src/lib/driver_backends.h"
 #include "src/lib/simulator_util.h"
 #include "src/lib/simulator_settings.h"
@@ -149,9 +149,8 @@ int main(int argc, char **argv)
     }
 #endif
 
-    /*Create a Demo*/
-    lv_demo_widgets();
-    lv_demo_widgets_start_slideshow();
+    /* Run the app selected via lunch */
+    app_entry_run();
 
     /* Enter the run loop of the selected backend */
     driver_backends_run_loop();

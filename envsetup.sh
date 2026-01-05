@@ -47,6 +47,12 @@ declare -A _LVGL_LUNCH_DEFAULTS=(
     ["rk3568-drm"]="$LVGL_PORT_ROOT/configs/lunch/rk3568_drm.defaults"
 )
 
+declare -a _LVGL_APP_MENU=("demo_widgets" "demo_benchmark")
+declare -A _LVGL_APP_DESC=(
+    ["demo_widgets"]="LVGL widgets demo with slideshow"
+    ["demo_benchmark"]="Benchmark demo"
+)
+
 _lvgl_print_lunch_menu() {
     echo "Available lunch combos:"
     local idx=1
@@ -58,6 +64,20 @@ _lvgl_print_lunch_menu() {
         echo "Current selection: ${LVGL_LUNCH_TARGET}"
     else
         echo "Current selection: (none)"
+    fi
+}
+
+_lvgl_print_app_menu() {
+    echo "Available app combos:"
+    local idx=1
+    for entry in "${_LVGL_APP_MENU[@]}"; do
+        printf "  %d. %s - %s\n" "${idx}" "${entry}" "${_LVGL_APP_DESC[$entry]}"
+        ((idx++))
+    done
+    if [[ -n "${LVGL_APP_TARGET:-}" ]]; then
+        echo "Current app: ${LVGL_APP_TARGET}"
+    else
+        echo "Current app: (none)"
     fi
 }
 
@@ -101,6 +121,33 @@ _lvgl_generate_lv_conf() {
         echo "Failed to regenerate lv_conf.h from ${defaults_file}" >&2
         return 1
     }
+}
+
+_lvgl_select_app() {
+    local selection="$1"
+
+    if [[ -z "${selection}" ]]; then
+        _lvgl_print_app_menu
+        read -rp "Select an app: " selection
+    fi
+
+    if [[ "${selection}" =~ ^[0-9]+$ ]]; then
+        local idx=$((selection - 1))
+        if ((idx < 0 || idx >= ${#_LVGL_APP_MENU[@]})); then
+            echo "Invalid app selection '${selection}'" >&2
+            return 1
+        fi
+        selection="${_LVGL_APP_MENU[$idx]}"
+    fi
+
+    if [[ -z "${_LVGL_APP_DESC[$selection]+_}" ]]; then
+        echo "Unknown app '${selection}'" >&2
+        return 1
+    fi
+
+    export LVGL_APP_TARGET="${selection}"
+    export LVGL_APP_DESCRIPTION="${_LVGL_APP_DESC[$selection]}"
+    return 0
 }
 
 _lvgl_apply_lunch_target() {
@@ -156,7 +203,11 @@ _lvgl_configure_cmake() {
     fi
 
     local base_dir="${LVGL_BUILD_BASE_DIR:-${LVGL_PORT_ROOT}/build}"
-    local build_dir="${base_dir}/${target}"
+    local build_suffix="${target}"
+    if [[ -n "${LVGL_APP_TARGET:-}" ]]; then
+        build_suffix="${build_suffix}-${LVGL_APP_TARGET}"
+    fi
+    local build_dir="${base_dir}/${build_suffix}"
     mkdir -p "${build_dir}"
 
     local -a cmake_args=(-S "${LVGL_PORT_ROOT}" -B "${build_dir}")
@@ -179,6 +230,10 @@ _lvgl_configure_cmake() {
         cmake_args+=("${extra_args[@]}")
     fi
 
+    if [[ -n "${LVGL_APP_TARGET:-}" ]]; then
+        cmake_args+=(-DLVGL_APP_TARGET="${LVGL_APP_TARGET}")
+    fi
+
     echo "Configuring CMake build dir: ${build_dir}"
     if ! (cd "${LVGL_PORT_ROOT}" && cmake "${cmake_args[@]}"); then
         echo "CMake configuration failed." >&2
@@ -190,55 +245,65 @@ _lvgl_configure_cmake() {
 }
 
 lunch() {
-    local selection="$1"
-    if [[ "${selection}" == "-c" || "${selection}" == "clear" ]]; then
+    local platform_selection="$1"
+    local app_selection="$2"
+
+    if [[ "${platform_selection}" == "-c" || "${platform_selection}" == "clear" ]]; then
         _lvgl_reset_toolchain
         unset LVGL_LUNCH_TARGET
         unset LVGL_LUNCH_DESCRIPTION
         unset LVGL_LUNCH_BACKENDS
         unset LVGL_BUILD_DIR
+        unset LVGL_APP_TARGET
+        unset LVGL_APP_DESCRIPTION
         echo "Lunch target cleared."
         return 0
     fi
 
-    if [[ "${selection}" == "-l" || "${selection}" == "list" ]]; then
+    if [[ "${platform_selection}" == "-l" || "${platform_selection}" == "list" ]]; then
         _lvgl_print_lunch_menu
+        echo
+        _lvgl_print_app_menu
         return 0
     fi
 
-    if [[ -z "${selection}" ]]; then
+    if [[ -z "${platform_selection}" ]]; then
         _lvgl_print_lunch_menu
-        read -rp "Select a target: " selection
+        read -rp "Select a platform: " platform_selection
     fi
 
-    if [[ "${selection}" =~ ^[0-9]+$ ]]; then
-        local idx=$((selection - 1))
+    if [[ "${platform_selection}" =~ ^[0-9]+$ ]]; then
+        local idx=$((platform_selection - 1))
         if ((idx < 0 || idx >= ${#_LVGL_LUNCH_MENU[@]})); then
-            echo "Invalid selection '${selection}'" >&2
+            echo "Invalid selection '${platform_selection}'" >&2
             return 1
         fi
-        selection="${_LVGL_LUNCH_MENU[$idx]}"
+        platform_selection="${_LVGL_LUNCH_MENU[$idx]}"
     fi
 
-    if [[ -z "${_LVGL_LUNCH_DESC[$selection]+_}" ]]; then
-        echo "Unknown lunch target '${selection}'" >&2
+    if [[ -z "${_LVGL_LUNCH_DESC[$platform_selection]+_}" ]]; then
+        echo "Unknown lunch target '${platform_selection}'" >&2
         return 1
     fi
 
-    if ! _lvgl_generate_lv_conf "${_LVGL_LUNCH_DEFAULTS[$selection]}"; then
+    if ! _lvgl_generate_lv_conf "${_LVGL_LUNCH_DEFAULTS[$platform_selection]}"; then
         return 1
     fi
 
-    if ! _lvgl_apply_lunch_target "${selection}"; then
+    if ! _lvgl_apply_lunch_target "${platform_selection}"; then
         return 1
     fi
 
-    if ! _lvgl_configure_cmake "${selection}"; then
+    if ! _lvgl_select_app "${app_selection}"; then
         return 1
     fi
 
-    export LVGL_LUNCH_TARGET="${selection}"
-    export LVGL_LUNCH_DESCRIPTION="${_LVGL_LUNCH_DESC[$selection]}"
+    if ! _lvgl_configure_cmake "${platform_selection}"; then
+        return 1
+    fi
+
+    export LVGL_LUNCH_TARGET="${platform_selection}"
+    export LVGL_LUNCH_DESCRIPTION="${_LVGL_LUNCH_DESC[$platform_selection]}"
 
     echo "Lunch target: ${LVGL_LUNCH_TARGET} (${LVGL_LUNCH_DESCRIPTION})"
     echo "  CC=${CC}"
@@ -248,7 +313,8 @@ lunch() {
     fi
     echo "  Enabled backends: ${LVGL_LUNCH_BACKENDS}"
     echo "  Build directory: ${LVGL_BUILD_DIR}"
-    echo "lv_conf.h regenerated from ${_LVGL_LUNCH_DEFAULTS[$selection]}"
+    echo "  App: ${LVGL_APP_TARGET} (${LVGL_APP_DESCRIPTION})"
+    echo "lv_conf.h regenerated from ${_LVGL_LUNCH_DEFAULTS[$platform_selection]}"
 }
 
 croot() {
@@ -274,7 +340,7 @@ mclean() {
 h() {
     cat <<EOF
 Helper commands (source envsetup.sh first):
-  lunch [target|number]   - Select a build preset. Runs CMake configure automatically.
+  lunch [platform] [app]  - Select platform + app presets. Runs CMake configure automatically.
   croot                   - cd into ${LVGL_PORT_ROOT}
   m [cmake args]          - Run 'cmake --build ${LVGL_BUILD_DIR:-<selected>}' with --parallel ${LVGL_MAKE_JOBS}
   mclean                  - Run 'cmake --build ... --target clean'
@@ -285,6 +351,7 @@ Environment after lunch:
   CC/CXX                  - Toolchains that 'make' will use
   PKG_CONFIG_*            - Overridden for cross builds when RK3568_SYSROOT is set
   LVGL_LUNCH_BACKENDS     - Hint of which LVGL backends are enabled via lv_conf defaults
+  LVGL_APP_TARGET         - Name of the active app preset
   LVGL_BUILD_DIR          - Target-specific CMake build directory
 
 Add new presets by creating configs/lunch/<name>.defaults and extending _LVGL_LUNCH_MENU.

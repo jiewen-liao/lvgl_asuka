@@ -13,7 +13,8 @@ set(TOOLCHAIN_DIR
 # 编译器设置
 set(CMAKE_C_COMPILER ${TOOLCHAIN_DIR}/bin/aarch64-none-linux-gnu-gcc)
 set(CMAKE_CXX_COMPILER ${TOOLCHAIN_DIR}/bin/aarch64-none-linux-gnu-g++)
-set(CMAKE_ASM_COMPILER ${TOOLCHAIN_DIR}/bin/aarch64-none-linux-gnu-as)
+# 让 ASM 走 gcc 驱动，避免 as 不识别 --sysroot
+set(CMAKE_ASM_COMPILER ${CMAKE_C_COMPILER})
 
 # Sysroot路径（使用完整的绝对路径
 set(SYSROOT_PATH
@@ -47,6 +48,6 @@ set(ARM_CPU_TYPE cortex-a55) # RK3568使用Cortex-A55
 set(CROSS_COMPILE_PREFIX ${TOOLCHAIN_DIR}/bin/aarch64-none-linux-gnu)
 
 # 添加必要的链接器路径
-set(CMAKE_C_STANDARD_LIBRARIES
-    "${CMAKE_C_STANDARD_LIBRARIES} -L${SYSROOT_PATH}/lib -L${SYSROOT_PATH}/usr/lib"
-)
+# set(CMAKE_C_STANDARD_LIBRARIES
+#     "${CMAKE_C_STANDARD_LIBRARIES} -L${SYSROOT_PATH}/lib -L${SYSROOT_PATH}/usr/lib"
+# )
