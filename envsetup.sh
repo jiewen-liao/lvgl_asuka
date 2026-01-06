@@ -47,10 +47,11 @@ declare -A _LVGL_LUNCH_DEFAULTS=(
     ["rk3568-drm"]="$LVGL_PORT_ROOT/configs/lunch/rk3568_drm.defaults"
 )
 
-declare -a _LVGL_APP_MENU=("demo_widgets" "demo_benchmark")
+declare -a _LVGL_APP_MENU=("demo_widgets" "demo_benchmark" "my_app")
 declare -A _LVGL_APP_DESC=(
     ["demo_widgets"]="LVGL widgets demo with slideshow"
     ["demo_benchmark"]="Benchmark demo"
+    ["my_app"]="My custom LVGL app"
 )
 
 _lvgl_print_lunch_menu() {

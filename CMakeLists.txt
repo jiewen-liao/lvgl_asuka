@@ -15,7 +15,11 @@ cmake_policy(SET CMP0079 NEW)
 set(CMAKE_C_STANDARD 99) # LVGL officially supports C99 and above
 set(CMAKE_CXX_STANDARD 17) #C17
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/bin")
+foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER "${cfg}" cfg_upper)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_SOURCE_DIR}/build/bin")
+endforeach()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wpedantic")
 
 set(LV_BUILD_SET_CONFIG_OPTS ON CACHE BOOL
@@ -317,4 +321,4 @@ install(TARGETS lvgl_linux
     ARCHIVE DESTINATION lib
 )
 
-add_custom_target(run COMMAND ${EXECUTABLE_OUTPUT_PATH}/lvglsim DEPENDS lvglsim)
+add_custom_target(run COMMAND $<TARGET_FILE:lvglsim> DEPENDS lvglsim)
