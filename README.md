@@ -174,7 +174,9 @@ CMake options before sourcing `envsetup.sh`.
 
 ## Add App
 
+```bash
 scripts/new_app.sh my_app "My custom LVGL app"
 source envsetup.sh
 lunch host-sdl my_app
 m
+```

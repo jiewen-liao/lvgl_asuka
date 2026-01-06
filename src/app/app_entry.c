@@ -8,7 +8,7 @@
 static void run_widgets_demo(void)
 {
     lv_demo_widgets();
-    lv_demo_widgets_start_slideshow();
+    // lv_demo_widgets_start_slideshow();
 }
 
 static void run_benchmark_demo(void)
