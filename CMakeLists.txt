@@ -58,6 +58,21 @@ if (CONFIG_LV_USE_LINUX_DRM)
 
 endif()
 
+if (CONFIG_LV_USE_LINUX_DRM AND CONFIG_LV_DRM_USE_RGA)
+
+    message("Including RGA support")
+    find_library(RGA_LIBRARY NAMES rga)
+    find_path(RGA_INCLUDE_DIR NAMES rga/RgaApi.h)
+
+    if(NOT RGA_LIBRARY OR NOT RGA_INCLUDE_DIR)
+        message(FATAL_ERROR "RGA library or headers not found (set RGA_LIBRARY/RGA_INCLUDE_DIR or fix sysroot)")
+    endif()
+
+    list(APPEND PKG_CONFIG_LIB ${RGA_LIBRARY})
+    list(APPEND PKG_CONFIG_INC ${RGA_INCLUDE_DIR})
+
+endif()
+
 if (CONFIG_LV_USE_LINUX_DRM_GBM_BUFFERS OR CONFIG_LV_LINUX_DRM_USE_EGL)
 
     message("Including GBM support")

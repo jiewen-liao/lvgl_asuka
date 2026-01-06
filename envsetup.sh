@@ -35,16 +35,18 @@ _lvgl_detect_jobs() {
 
 export LVGL_MAKE_JOBS="${LVGL_MAKE_JOBS:-$(_lvgl_detect_jobs)}"
 
-declare -a _LVGL_LUNCH_MENU=("host-sdl" "host-wayland" "rk3568-drm")
+declare -a _LVGL_LUNCH_MENU=("host-sdl" "host-wayland" "rk3568-drm" "rk3568_drm_rga")
 declare -A _LVGL_LUNCH_DESC=(
     ["host-sdl"]="Native SDL simulator on the host (gcc/g++)"
     ["host-wayland"]="Native Wayland client on the host"
     ["rk3568-drm"]="RK3568 target using DRM/KMS with a cross toolchain"
+    ["rk3568_drm_rga"]="RK3568 target using DRM/KMS + RGA blit"
 )
 declare -A _LVGL_LUNCH_DEFAULTS=(
     ["host-sdl"]="$LVGL_PORT_ROOT/configs/lunch/host_sdl.defaults"
     ["host-wayland"]="$LVGL_PORT_ROOT/configs/lunch/host_wayland.defaults"
     ["rk3568-drm"]="$LVGL_PORT_ROOT/configs/lunch/rk3568_drm.defaults"
+    ["rk3568_drm_rga"]="$LVGL_PORT_ROOT/configs/lunch/rk3568_drm_rga.defaults"
 )
 
 declare -a _LVGL_APP_MENU=("demo_widgets" "demo_benchmark" "my_app")
@@ -187,6 +189,21 @@ _lvgl_apply_lunch_target() {
             fi
             export LVGL_LUNCH_BACKENDS="drm"
             ;;
+        rk3568_drm_rga)
+            local prefix="${RK3568_TOOLCHAIN_PREFIX:-aarch64-linux-gnu}"
+            [[ "${prefix}" == *- ]] || prefix="${prefix}-"
+            local rk_cc="${RK3568_CC:-${prefix}gcc}"
+            local rk_cxx="${RK3568_CXX:-${prefix}g++}"
+            export CC="${rk_cc}"
+            export CXX="${rk_cxx}"
+            if [[ -z "${RK3568_CMAKE_TOOLCHAIN_FILE:-}" ]]; then
+                local default_toolchain="${LVGL_PORT_ROOT}/rk3568_toolchain.cmake"
+                if [[ -f "${default_toolchain}" ]]; then
+                    export RK3568_CMAKE_TOOLCHAIN_FILE="${default_toolchain}"
+                fi
+            fi
+            export LVGL_LUNCH_BACKENDS="drm,rga"
+            ;;
         *)
             echo "Unknown lunch target '${target}'" >&2
             return 1
@@ -212,7 +229,7 @@ _lvgl_configure_cmake() {
     mkdir -p "${build_dir}"
 
     local -a cmake_args=(-S "${LVGL_PORT_ROOT}" -B "${build_dir}")
-    if [[ "${target}" == "rk3568-drm" ]]; then
+    if [[ "${target}" == "rk3568-drm" || "${target}" == "rk3568_drm_rga" ]]; then
         local default_toolchain="${LVGL_PORT_ROOT}/rk3568_toolchain.cmake"
         if [[ ! -f "${default_toolchain}" ]]; then
             default_toolchain="${LVGL_PORT_ROOT}/user_cross_compile_setup.cmake"

@@ -1,0 +1,313 @@
+diff --git a/lv_conf_template.h b/lv_conf_template.h
+index 79d79ec5f..7f714a1ed 100644
+--- a/lv_conf_template.h
++++ b/lv_conf_template.h
+@@ -1303,6 +1303,9 @@
+      * it supports the major GPU vendors - This option requires linking with libgbm */
+     #define LV_USE_LINUX_DRM_GBM_BUFFERS 0
+ 
++    /* Use Rockchip RGA to blit the LVGL draw buffer into the DRM scanout buffer */
++    #define LV_DRM_USE_RGA 0
++
+     #define LV_LINUX_DRM_USE_EGL     0
+ #endif
+ 
+diff --git a/src/drivers/display/drm/lv_linux_drm.c b/src/drivers/display/drm/lv_linux_drm.c
+index 050556e06..e4d6b5977 100644
+--- a/src/drivers/display/drm/lv_linux_drm.c
++++ b/src/drivers/display/drm/lv_linux_drm.c
+@@ -14,6 +14,7 @@
+ #include <poll.h>
+ #include <stdint.h>
+ #include <sys/mman.h>
++#include <sys/ioctl.h>
+ #include <time.h>
+ #include <unistd.h>
+ #include <string.h>
+@@ -25,6 +26,12 @@
+ #include "../../../stdlib/lv_sprintf.h"
+ #include "../../../draw/lv_draw_buf.h"
+ 
++#if LV_DRM_USE_RGA
++#include <rga/im2d.h>
++#include <rga/rga.h>
++#include <rga/RgaApi.h>
++#endif
++
+ #if LV_USE_LINUX_DRM_GBM_BUFFERS
+ 
+     #include <gbm.h>
+@@ -44,6 +51,18 @@
+     #error LV_COLOR_DEPTH not supported
+ #endif
+ 
++#if LV_DRM_USE_RGA
++    #if LV_COLOR_DEPTH == 16
++        #define RGA_FORMAT RK_FORMAT_BGR_565
++    #elif LV_COLOR_DEPTH == 24
++        #define RGA_FORMAT RK_FORMAT_BGR_888
++    #elif LV_COLOR_DEPTH == 32
++        #define RGA_FORMAT RK_FORMAT_BGRA_8888
++    #else
++        #error LV_COLOR_DEPTH not supported for RGA
++    #endif
++#endif
++
+ #define BUFFER_CNT 2
+ 
+ /**********************
+@@ -56,6 +75,9 @@ typedef struct {
+     unsigned long int size;
+     uint8_t * map;
+     uint32_t fb_handle;
++#if LV_DRM_USE_RGA
++    int prime_fd;
++#endif
+ } drm_buffer_t;
+ 
+ typedef struct {
+@@ -80,6 +102,10 @@ typedef struct {
+     drmModePropertyPtr conn_props[128];
+     drm_buffer_t drm_bufs[BUFFER_CNT];
+     drm_buffer_t * act_buf;
++#if LV_DRM_USE_RGA
++    drm_buffer_t rga_buf;
++    uint32_t rga_buf_idx;
++#endif
+ #if LV_USE_LINUX_DRM_GBM_BUFFERS
+     struct gbm_device * gbm_device;
+ #endif
+@@ -117,7 +143,12 @@ static int drm_setup_buffers(drm_dev_t * drm_dev);
+ static int drm_dmabuf_set_plane(drm_dev_t * drm_dev, drm_buffer_t * buf);
+ static void drm_flush_wait(lv_display_t * drm_dev);
+ static void drm_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map);
++#if !LV_DRM_USE_RGA
+ static void drm_dmabuf_set_active_buf(lv_event_t * event);
++#endif
++#if LV_DRM_USE_RGA
++static int drm_rga_blit(drm_dev_t * drm_dev, drm_buffer_t * dst_buf);
++#endif
+ 
+ /**********************
+  *  STATIC VARIABLES
+@@ -162,6 +193,7 @@ lv_display_t * lv_linux_drm_create(void)
+  * it sets the active buffer. if GBM buffers are used, it issues a DMA_BUF_SYNC
+  * ioctl call to lock the buffer for CPU access, the buffer is unlocked just
+  * before the atomic commit */
++#if !LV_DRM_USE_RGA
+ static void drm_dmabuf_set_active_buf(lv_event_t * event)
+ {
+ 
+@@ -203,6 +235,7 @@ static void drm_dmabuf_set_active_buf(lv_event_t * event)
+     }
+ 
+ }
++#endif
+ 
+ void lv_linux_drm_set_file(lv_display_t * disp, const char * file, int64_t connector_id)
+ {
+@@ -230,18 +263,24 @@ void lv_linux_drm_set_file(lv_display_t * disp, const char * file, int64_t conne
+ 
+     int32_t width = drm_dev->mmWidth;
+ 
+-    size_t buf_size = LV_MIN(drm_dev->drm_bufs[1].size, drm_dev->drm_bufs[0].size);
+     /* Resolution must be set first because if the screen is smaller than the size passed
+      * to lv_display_create then the buffers aren't big enough for LV_DISPLAY_RENDER_MODE_DIRECT.
+      */
+     lv_display_set_resolution(disp, hor_res, ver_res);
++
++#if LV_DRM_USE_RGA
++    size_t buf_size = drm_dev->rga_buf.size;
++    lv_display_set_buffers_with_stride(disp, drm_dev->rga_buf.map, NULL, buf_size, drm_dev->rga_buf.pitch,
++                                       LV_DISPLAY_RENDER_MODE_PARTIAL);
++#else
++    size_t buf_size = LV_MIN(drm_dev->drm_bufs[1].size, drm_dev->drm_bufs[0].size);
+     lv_display_set_buffers(disp, drm_dev->drm_bufs[1].map, drm_dev->drm_bufs[0].map, buf_size,
+                            LV_DISPLAY_RENDER_MODE_DIRECT);
+ 
+-
+     /* Set the handler that is called before a redraw occurs to set the active buffer/plane
+      * when GBM buffers are used the DMA_BUF_SYNC_START is issued there */
+     lv_display_add_event_cb(disp, drm_dmabuf_set_active_buf, LV_EVENT_REFR_START, drm_dev);
++#endif
+ 
+     if(width) {
+         lv_display_set_dpi(disp, DIV_ROUND_UP(hor_res * 25400, width * 1000));
+@@ -493,6 +532,54 @@ static int drm_dmabuf_set_plane(drm_dev_t * drm_dev, drm_buffer_t * buf)
+     return 0;
+ }
+ 
++#if LV_DRM_USE_RGA
++static int drm_rga_blit(drm_dev_t * drm_dev, drm_buffer_t * dst_buf)
++{
++    rga_buffer_t src_img;
++    rga_buffer_t dst_img;
++    rga_buffer_t pat_img;
++    im_rect src_rect;
++    im_rect dst_rect;
++    im_rect pat_rect;
++    int ret;
++    int usage = IM_SYNC;
++
++    if(drm_dev->rga_buf.prime_fd < 0 || dst_buf->prime_fd < 0) {
++        LV_LOG_ERROR("RGA requires prime fd for buffers");
++        return -1;
++    }
++
++    src_img = wrapbuffer_fd(drm_dev->rga_buf.prime_fd, drm_dev->width, drm_dev->height, RGA_FORMAT,
++                            drm_dev->rga_buf.pitch / (LV_COLOR_DEPTH >> 3), drm_dev->height);
++    dst_img = wrapbuffer_fd(dst_buf->prime_fd, drm_dev->width, drm_dev->height, RGA_FORMAT,
++                            dst_buf->pitch / (LV_COLOR_DEPTH >> 3), drm_dev->height);
++
++    lv_memzero(&src_rect, sizeof(src_rect));
++    lv_memzero(&dst_rect, sizeof(dst_rect));
++    lv_memzero(&pat_rect, sizeof(pat_rect));
++    lv_memzero(&pat_img, sizeof(pat_img));
++
++    src_rect.width = drm_dev->width;
++    src_rect.height = drm_dev->height;
++    dst_rect.width = drm_dev->width;
++    dst_rect.height = drm_dev->height;
++
++    ret = imcheck_composite(src_img, dst_img, pat_img, src_rect, dst_rect, pat_rect, usage);
++    if(ret != IM_STATUS_NOERROR) {
++        LV_LOG_ERROR("RGA check failed: %s", imStrError((IM_STATUS)ret));
++        return -1;
++    }
++
++    ret = improcess(src_img, dst_img, pat_img, src_rect, dst_rect, pat_rect, usage);
++    if(ret != IM_STATUS_SUCCESS) {
++        LV_LOG_ERROR("RGA blit failed: %s", imStrError((IM_STATUS)ret));
++        return -1;
++    }
++
++    return 0;
++}
++#endif
++
+ static int find_plane(drm_dev_t * drm_dev, unsigned int fourcc, uint32_t * plane_id, uint32_t crtc_id,
+                       uint32_t crtc_idx)
+ {
+@@ -855,6 +942,19 @@ static int drm_allocate_dumb(drm_dev_t * drm_dev, drm_buffer_t * buf)
+     buf->pitch = creq.pitch;
+     buf->size = creq.size;
+ 
++#if LV_DRM_USE_RGA
++    struct drm_prime_handle prime;
++    lv_memzero(&prime, sizeof(prime));
++    prime.handle = creq.handle;
++    prime.flags = DRM_CLOEXEC | DRM_RDWR;
++    ret = drmIoctl(drm_dev->fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &prime);
++    if(ret) {
++        LV_LOG_ERROR("DRM_IOCTL_PRIME_HANDLE_TO_FD fail");
++        return -1;
++    }
++    buf->prime_fd = prime.fd;
++#endif
++
+     /* prepare buffer for memory mapping */
+     lv_memzero(&mreq, sizeof(mreq));
+     mreq.handle = creq.handle;
+@@ -945,6 +1045,10 @@ static int create_gbm_buffer(drm_dev_t * drm_dev, drm_buffer_t * buf)
+ 
+     }
+ 
++#if LV_DRM_USE_RGA
++    buf->prime_fd = prime_fd;
++#endif
++
+     buf->map = mmap(NULL, buf->size, PROT_READ | PROT_WRITE, MAP_SHARED, prime_fd, 0);
+ 
+     if(buf->map == MAP_FAILED) {
+@@ -994,6 +1098,13 @@ static int drm_setup_buffers(drm_dev_t * drm_dev)
+         return ret;
+     }
+ 
++#if LV_DRM_USE_RGA
++    ret = create_gbm_buffer(drm_dev, &drm_dev->rga_buf);
++    if(ret < 0) {
++        return ret;
++    }
++#endif
++
+ #else
+ 
+     /* Use dumb buffers */
+@@ -1005,6 +1116,20 @@ static int drm_setup_buffers(drm_dev_t * drm_dev)
+     if(ret)
+         return ret;
+ 
++#if LV_DRM_USE_RGA
++    ret = drm_allocate_dumb(drm_dev, &drm_dev->rga_buf);
++    if(ret)
++        return ret;
++#endif
++
++#endif
++
++#if LV_DRM_USE_RGA
++    if(c_RkRgaInit() != 0) {
++        LV_LOG_ERROR("RGA init failed");
++        return -1;
++    }
++    drm_dev->rga_buf_idx = 0;
+ #endif
+ 
+     return 0;
+@@ -1036,6 +1161,33 @@ static void drm_flush_wait(lv_display_t * disp)
+ static void drm_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_map)
+ {
+ 
++#if LV_DRM_USE_RGA
++    drm_dev_t * drm_dev = lv_display_get_driver_data(disp);
++    uint32_t bpp = (LV_COLOR_DEPTH >> 3);
++    uint32_t row_bytes = lv_area_get_width(area) * bpp;
++    uint8_t * dst = drm_dev->rga_buf.map + (area->y1 * drm_dev->rga_buf.pitch) + (area->x1 * bpp);
++
++    for(int32_t y = area->y1; y <= area->y2; y++) {
++        lv_memcpy(dst, px_map, row_bytes);
++        dst += drm_dev->rga_buf.pitch;
++        px_map += row_bytes;
++    }
++
++    if(lv_display_flush_is_last(disp)) {
++        drm_dev->rga_buf_idx ^= 1U;
++        drm_buffer_t * dst_buf = &drm_dev->drm_bufs[drm_dev->rga_buf_idx];
++        if(drm_rga_blit(drm_dev, dst_buf) == 0) {
++            if(drm_dmabuf_set_plane(drm_dev, dst_buf)) {
++                LV_LOG_ERROR("Flush fail");
++            }
++            else {
++                drm_flush_wait(disp);
++            }
++        }
++    }
++
++    lv_display_flush_ready(disp);
++#else
+     if(!lv_display_flush_is_last(disp)) return;
+ 
+     LV_UNUSED(area);
+@@ -1050,6 +1202,7 @@ static void drm_flush(lv_display_t * disp, const lv_area_t * area, uint8_t * px_
+     }
+ 
+     drm_dev->act_buf = NULL;
++#endif
+ 
+ }
+ 
+diff --git a/src/drivers/display/drm/lv_linux_drm.h b/src/drivers/display/drm/lv_linux_drm.h
+index b4547308e..397fbf905 100644
+--- a/src/drivers/display/drm/lv_linux_drm.h
++++ b/src/drivers/display/drm/lv_linux_drm.h
+@@ -19,6 +19,10 @@ extern "C" {
+ #if LV_USE_LINUX_DRM
+ #include <xf86drmMode.h>
+ 
++#ifndef LV_DRM_USE_RGA
++#define LV_DRM_USE_RGA 0
++#endif
++
+ /*********************
+  *      DEFINES
+  *********************/
