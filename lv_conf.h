@@ -377,7 +377,7 @@
 #endif
 
 /** Draw using cached OpenGLES textures. Requires LV_USE_OPENGLES */
-#define LV_USE_DRAW_OPENGLES 0
+#define LV_USE_DRAW_OPENGLES 1
 #if LV_USE_DRAW_OPENGLES
     #define LV_DRAW_OPENGLES_TEXTURE_CACHE_COUNT 64
 #endif
@@ -1303,9 +1303,9 @@
     #define LV_USE_LINUX_DRM_GBM_BUFFERS 0
 
     /* Use Rockchip RGA to blit the LVGL draw buffer into the DRM scanout buffer */
-    #define LV_DRM_USE_RGA 1
+    #define LV_DRM_USE_RGA 0
 
-    #define LV_LINUX_DRM_USE_EGL     0
+    #define LV_LINUX_DRM_USE_EGL     1
 #endif
 
 /** Interface for TFT_eSPI */
@@ -1374,7 +1374,7 @@
 #endif
 
 /** Use a generic OpenGL driver that can be used to embed in other applications or used with GLFW/EGL */
-#define LV_USE_OPENGLES   0
+#define LV_USE_OPENGLES   1
 #if LV_USE_OPENGLES
     #define LV_USE_OPENGLES_DEBUG        1    /**< Enable or disable debug for opengles */
 #endif

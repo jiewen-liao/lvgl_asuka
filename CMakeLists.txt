@@ -83,6 +83,60 @@ if (CONFIG_LV_USE_LINUX_DRM_GBM_BUFFERS OR CONFIG_LV_LINUX_DRM_USE_EGL)
     list(APPEND PKG_CONFIG_LIB ${LIBGBM_LIBRARIES})
     list(APPEND PKG_CONFIG_INC ${LIBGBM_INCLUDE_DIRS})
 
+    find_library(GBM_LIBRARY NAMES gbm)
+    if(GBM_LIBRARY)
+        list(APPEND PKG_CONFIG_LIB ${GBM_LIBRARY})
+    endif()
+
+endif()
+
+if (CONFIG_LV_LINUX_DRM_USE_EGL OR CONFIG_LV_USE_OPENGLES OR CONFIG_LV_USE_DRAW_OPENGLES)
+
+    message("Including EGL/GLES support")
+
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(EGL REQUIRED egl)
+    pkg_check_modules(GLESV2 REQUIRED glesv2)
+
+    list(APPEND PKG_CONFIG_LIB ${EGL_LIBRARIES} ${GLESV2_LIBRARIES})
+    list(APPEND PKG_CONFIG_INC ${EGL_INCLUDE_DIRS} ${GLESV2_INCLUDE_DIRS})
+
+    find_library(EGL_LIBRARY NAMES EGL)
+    if(EGL_LIBRARY)
+        list(APPEND PKG_CONFIG_LIB ${EGL_LIBRARY})
+    endif()
+
+    find_library(GLESV2_LIBRARY NAMES GLESv2)
+    if(GLESV2_LIBRARY)
+        list(APPEND PKG_CONFIG_LIB ${GLESV2_LIBRARY})
+    endif()
+
+    if(CMAKE_SYSROOT)
+        find_library(MALI_HOOK_LIBRARY NAMES mali_hook PATHS
+            ${CMAKE_SYSROOT}/lib64 ${CMAKE_SYSROOT}/usr/lib64
+            ${CMAKE_SYSROOT}/lib ${CMAKE_SYSROOT}/usr/lib
+            NO_DEFAULT_PATH)
+        if(MALI_HOOK_LIBRARY)
+            list(APPEND PKG_CONFIG_LIB ${MALI_HOOK_LIBRARY})
+        endif()
+
+        find_library(MALI_LIBRARY NAMES mali PATHS
+            ${CMAKE_SYSROOT}/lib64 ${CMAKE_SYSROOT}/usr/lib64
+            ${CMAKE_SYSROOT}/lib ${CMAKE_SYSROOT}/usr/lib
+            NO_DEFAULT_PATH)
+        if(MALI_LIBRARY)
+            list(APPEND PKG_CONFIG_LIB ${MALI_LIBRARY})
+        endif()
+
+        find_library(MALI_HOOK_INJECTOR_LIBRARY NAMES mali_hook_injector PATHS
+            ${CMAKE_SYSROOT}/lib64 ${CMAKE_SYSROOT}/usr/lib64
+            ${CMAKE_SYSROOT}/lib ${CMAKE_SYSROOT}/usr/lib
+            NO_DEFAULT_PATH)
+        if(MALI_HOOK_INJECTOR_LIBRARY)
+            list(APPEND PKG_CONFIG_LIB ${MALI_HOOK_INJECTOR_LIBRARY})
+        endif()
+    endif()
+
 endif()
 
 if (CONFIG_LV_USE_LIBINPUT)
